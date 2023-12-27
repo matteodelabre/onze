@@ -10,7 +10,7 @@ Hand = set[Card]
 Hands = Sequence[Hand]
 
 suits = ("C", "D", "H", "S")
-ranks = ("5", "6", "7", "8", "9", "10", "J", "Q", "K", "A")
+ranks = ("5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
 scores = (5, 0, 0, 0, 0, 10, 0, 0, 0, 10)
 
 cards = list(starmap(Card, product(suits, ranks)))

@@ -65,7 +65,7 @@ def test_make_card_key():
 
 def test_deal_hands():
     random = NotRandom()
-    all_ranks = ("5", "6", "7", "8", "9", "10", "J", "Q", "K", "A")
+    all_ranks = ("5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
 
     assert deal_hands(random) == (
         set(Card("C", rank) for rank in all_ranks),
@@ -83,7 +83,7 @@ def test_deal_hands():
         Card("S", "7"),
         Card("C", "A"),
         Card("D", "J"),
-        Card("D", "10"),
+        Card("D", "T"),
         Card("C", "7"),
     }
     assert deal_hands(random, (hand,)) == (
@@ -91,7 +91,7 @@ def test_deal_hands():
         {
             Card("C", "6"),
             Card("C", "9"),
-            Card("C", "10"),
+            Card("C", "T"),
             Card("C", "J"),
             Card("C", "Q"),
             Card("C", "K"),
@@ -108,7 +108,7 @@ def test_deal_hands():
             Card("H", "6"),
             Card("H", "7"),
             Card("H", "8"),
-            Card("H", "10"),
+            Card("H", "T"),
             Card("H", "J"),
             Card("H", "Q"),
         },
@@ -119,7 +119,7 @@ def test_deal_hands():
             Card("S", "6"),
             Card("S", "8"),
             Card("S", "9"),
-            Card("S", "10"),
+            Card("S", "T"),
             Card("S", "J"),
             Card("S", "Q"),
             Card("S", "K"),
@@ -155,11 +155,11 @@ def test_score_trick():
     ) == (5, 0)
 
     assert score_trick(
-        (Card("C", "5"), Card("D", "8"), Card("C", "10"), Card("C", "7"))
+        (Card("C", "5"), Card("D", "8"), Card("C", "T"), Card("C", "7"))
     ) == (15, 2)
 
     assert score_trick(
-        (Card("C", "5"), Card("D", "8"), Card("C", "10"), Card("C", "7")),
+        (Card("C", "5"), Card("D", "8"), Card("C", "T"), Card("C", "7")),
         trump="D",
     ) == (15, 1)
 
