@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "onze"
+version = "0.0.1"
+authors = [
+    { name="Mattéo Delabre", email="git.matteo@delab.re" },
+]
+description = "sowing"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.scripts]
+onze = "onze.judge:run"
+
+[project.urls]
+"Homepage" = "https://github.com/matteodelabre/onze"
+"Bug Tracker" = "https://github.com/matteodelabre/onze"
+
+[tool.hatch.build]
+sources = ["src"]
+only-include = ["src"]
+
+[tool.hatch.envs.dev]
+dependencies = [
+    "black",
+    "mypy",
+    "pytest",
+    "ruff",
+]
+
+[tool.hatch.envs.dev.scripts]
+test = "pytest --exitfirst"
+test-verbose = "pytest --exitfirst -vv"
+format = "black ."
+format-check = "black --check ."
+lint = "ruff check ."
+type = "mypy -p src"
