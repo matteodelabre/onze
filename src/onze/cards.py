@@ -72,7 +72,7 @@ def score_trick(trick: Trick, trump: str | None = None) -> tuple[int, int]:
     :returns: total trick score and index of the winning player
     """
     total = sum(map(score_card, trick))
-    follow = cards[0].suit
+    follow = trick[0].suit
     max_card = max(trick, key=make_card_key(follow, trump))
     return total, trick.index(max_card)
 

@@ -85,8 +85,8 @@ def play(
         player = (player + 1) % 4
 
         if len(trick) == 4:
-            trick = trick[-player:] + trick[:-player]
             score, winner = cards.score_trick(trick, trump)
+            winner = (player + winner) % 4
             scores[winner % 2] += score
 
             player = winner

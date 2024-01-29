@@ -163,6 +163,11 @@ def test_score_trick():
         trump="D",
     ) == (15, 1)
 
+    assert score_trick(
+        (Card("D", "J"), Card("D", "Q"), Card("D", "5"), Card("H", "8")),
+        trump="C",
+    ) == (5, 1)
+
 
 def test_playable_cards():
     hand1 = {
