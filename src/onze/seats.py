@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Protocol
 from subprocess import Popen, PIPE
+from .protocol import Command, write_command
 
 
 class Seat(Protocol):
@@ -8,8 +9,8 @@ class Seat(Protocol):
         """Return a human-readable of this seat’s configuration."""
         ...
 
-    def send(self, message: str) -> None:
-        """Send a message to this seat."""
+    def send(self, command: Command) -> None:
+        """Send a command to this seat."""
         ...
 
     def receive(self) -> str:
@@ -27,8 +28,8 @@ class TerminalSeat:
         player = self.player
         return f"TerminalSeat({player=})"
 
-    def send(self, message: str) -> None:
-        print(f"[seat {self.player}] <- {message}")
+    def send(self, command: Command) -> None:
+        print(f"[seat {self.player}] <- {command}")
 
     def receive(self) -> str:
         return input(f"[seat {self.player}] -> ")
@@ -46,9 +47,9 @@ class SubprocessSeat:
         args = self.process.args
         return f"SubprocessSeat({player=}, {args=})"
 
-    def send(self, message: str) -> None:
+    def send(self, command: Command) -> None:
         assert self.process.stdin is not None
-        self.process.stdin.write(message + "\n")
+        self.process.stdin.write(write_command(command) + "\n")
         self.process.stdin.flush()
 
     def receive(self) -> str:

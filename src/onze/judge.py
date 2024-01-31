@@ -1,4 +1,4 @@
-from . import game, cards, seats
+from . import game, cards, seats, protocol
 import argparse
 from random import Random
 from functools import partial
@@ -8,28 +8,13 @@ import os
 Table = dict[int, seats.Seat]
 
 
-def serialize_card(card: cards.Card) -> str:
-    return card.suit + card.rank
-
-
-def serialize_hand(hand: cards.Hand) -> str:
-    return " ".join(map(serialize_card, sorted(hand, key=cards.make_card_key())))
-
-
-def unserialize_card(data: str) -> cards.Card | None:
-    if data:
-        return cards.Card(suit=data[0], rank=data[1:])
-    else:
-        return None
-
-
-def broadcast(table: Table, message: str) -> None:
+def broadcast(table: Table, command: str) -> None:
     for player in table:
-        table[player].send(message)
+        table[player].send(command)
 
 
 def make_bid(table: Table, bidder: int) -> int:
-    table[bidder].send("bid ?")
+    table[bidder].send(protocol.QueryBidCommand())
     request = table[bidder].receive()
 
     try:
@@ -39,22 +24,23 @@ def make_bid(table: Table, bidder: int) -> int:
 
 
 def send_bid(table: Table, bidder: int, bid: int) -> None:
-    broadcast(table, f"bid {bidder} {bid}")
+    broadcast(table, protocol.ReplyBidCommand(bidder, bid))
+    print(f"<DEBUG> player {bidder} bids {bid}")
 
 
 def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Card:
-    print(f"<DEBUG> player {player} plays - " f"playable={serialize_hand(playable)}")
+    print(f"<DEBUG> player {player} plays - playable={protocol.write_hand(playable)}")
 
-    table[player].send("card ?")
+    table[player].send(protocol.QueryCardCommand())
     request = table[player].receive()
-    card = unserialize_card(request)
+    card = protocol.read_card(request)
 
     if card not in playable:
         print(f"<DEBUG> invalid card '{request}'")
         card = sorted(playable, key=cards.make_card_key())[0]
 
-    broadcast(table, f"card {player} {serialize_card(card)}")
-    print(f"<DEBUG> played {serialize_card(card)}")
+    broadcast(table, protocol.ReplyCardCommand(player, card))
+    print(f"<DEBUG> played {protocol.write_card(card)}")
 
     return card
 
@@ -87,7 +73,7 @@ def setup_table(programs: list[list[str]]) -> Table:
         else:
             table[player] = seats.SubprocessSeat(player, program)
 
-        table[player].send(f"player {player}")
+        table[player].send(protocol.PlayerCommand(player))
         print(f"<DEBUG> player {player} - seat={table[player]}")
 
     return table
@@ -106,8 +92,8 @@ def run() -> None:
         hands = cards.deal_hands(random)
 
         for player, hand in enumerate(hands):
-            table[player].send(f"hand {serialize_hand(hand)}")
-            print(f"<DEBUG> player {player} - hand={serialize_hand(hand)}")
+            table[player].send(protocol.HandCommand(hand))
+            print(f"<DEBUG> player {player} - hand={protocol.write_hand(hand)}")
 
         winner, bid = game.bid(
             starter=starter,
@@ -142,4 +128,4 @@ def run() -> None:
         print(f"{total_scores=}")
         starter = (starter + 1) % 4
 
-    broadcast(table, "end")
+    broadcast(table, protocol.EndCommand())
