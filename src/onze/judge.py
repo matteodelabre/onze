@@ -25,22 +25,22 @@ def make_bid(table: Table, bidder: int) -> int:
 
 def send_bid(table: Table, bidder: int, bid: int) -> None:
     broadcast(table, protocol.ReplyBidCommand(bidder, bid))
-    print(f"<DEBUG> player {bidder} bids {bid}")
+    print(f"[server] player {bidder} bids {bid}")
 
 
 def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Card:
-    print(f"<DEBUG> player {player} plays - playable={protocol.write_hand(playable)}")
+    print(f"[server] player {player} plays - playable={protocol.write_hand(playable)}")
 
     table[player].send(protocol.QueryCardCommand())
     request = table[player].receive()
     card = protocol.read_card(request)
 
     if card not in playable:
-        print(f"<DEBUG> invalid card '{request}'")
+        print(f"[server] invalid card '{request}'")
         card = sorted(playable, key=cards.make_card_key())[0]
 
     broadcast(table, protocol.ReplyCardCommand(player, card))
-    print(f"<DEBUG> played {protocol.write_card(card)}")
+    print(f"[server] played {protocol.write_card(card)}")
 
     return card
 
@@ -73,8 +73,8 @@ def setup_table(programs: list[list[str]]) -> Table:
         else:
             table[player] = seats.SubprocessSeat(player, program)
 
+        print(f"[server] seat {player} is {table[player]}")
         table[player].send(protocol.PlayerCommand(player))
-        print(f"<DEBUG> player {player} - seat={table[player]}")
 
     return table
 
@@ -82,7 +82,7 @@ def setup_table(programs: list[list[str]]) -> Table:
 def run() -> None:
     args = parse_args()
     table = setup_table(args.program)
-    print(f"<DEBUG> seed={args.seed}")
+    print(f"[server] seed={args.seed}")
 
     random = Random(args.seed)
     total_scores = {0: 0, 1: 0}
@@ -93,7 +93,7 @@ def run() -> None:
 
         for player, hand in enumerate(hands):
             table[player].send(protocol.HandCommand(hand))
-            print(f"<DEBUG> player {player} - hand={protocol.write_hand(hand)}")
+            print(f"[server] player {player} - hand={protocol.write_hand(hand)}")
 
         winner, bid = game.bid(
             starter=starter,
@@ -107,7 +107,7 @@ def run() -> None:
             play_card=partial(play_card, table),
         )
 
-        print(f"{scores=}")
+        print(f"[server] {scores=}")
 
         bidding_team = winner % 2
         other_team = (winner + 1) % 2
@@ -125,7 +125,10 @@ def run() -> None:
 
             total_scores[other_team] += scores[other_team]
 
-        print(f"{total_scores=}")
+        print(f"[server] {total_scores=}")
         starter = (starter + 1) % 4
 
     broadcast(table, protocol.EndCommand())
+
+    for player in range(4):
+        table[player].close()
