@@ -1,6 +1,7 @@
 from onze.cards import Card, Hand
 from onze.game import play
 from onze.protocol import read_hand, read_card
+import asyncio
 from dataclasses import dataclass
 
 
@@ -78,7 +79,7 @@ def test_play():
 
     next_move = 0
 
-    def play_card(player: int, playable_cards: Hand) -> Card:
+    async def play_card(player: int, playable_cards: Hand) -> Card:
         nonlocal next_move
         assert player == game[next_move].player
         assert playable_cards == game[next_move].playable_cards
@@ -87,5 +88,5 @@ def test_play():
         next_move += 1
         return card
 
-    scores = play(starter=0, hands=hands, play_card=play_card)
+    scores = asyncio.run(play(starter=0, hands=hands, play_card=play_card))
     assert scores == {0: 70, 1: 30}

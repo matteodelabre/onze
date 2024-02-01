@@ -1,12 +1,12 @@
 from .cards import Hands, Hand, Card
 from . import cards
-from collections.abc import Callable
+from collections.abc import Callable, Awaitable
 
 
-def bid(
+async def bid(
     starter: int,
-    make_bid: Callable[[int], int],
-    send_bid: Callable[[int, int], None],
+    make_bid: Callable[[int], Awaitable[int]],
+    send_bid: Callable[[int, int], Awaitable[None]],
 ) -> tuple[int, int]:
     """
     Run a bidding round and return the winning bidder.
@@ -24,7 +24,7 @@ def bid(
     maximum_bid = 105
 
     while len(bids) > 1:
-        bid = make_bid(bidder)
+        bid = await make_bid(bidder)
 
         if bid % 5 == 0 and minimum_bid <= bid <= maximum_bid:
             bids[bidder] = bid
@@ -33,7 +33,7 @@ def bid(
             bid = 0
             del bids[bidder]
 
-        send_bid(bidder, bid)
+        await send_bid(bidder, bid)
         bidder = (bidder + 1) % 4
 
         while bidder not in bids:
@@ -44,15 +44,15 @@ def bid(
     if bid == 0:
         # Default bid if everyone else leaves
         bid = default_bid
-        send_bid(winner, bid)
+        await send_bid(winner, bid)
 
     return winner, bid
 
 
-def play(
+async def play(
     starter: int,
     hands: Hands,
-    play_card: Callable[[int, Hand], Card],
+    play_card: Callable[[int, Hand], Awaitable[Card]],
 ) -> dict[int, int]:
     """
     Run a full game and compute final scores.
@@ -72,7 +72,7 @@ def play(
     while hands[player]:
         hand = hands[player]
         playable = cards.playable_cards(trick, hand)
-        card = play_card(player, playable)
+        card = await play_card(player, playable)
 
         if card not in playable:
             raise RuntimeError(f"illegal card {card}")

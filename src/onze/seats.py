@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Protocol
-from subprocess import Popen, PIPE
-from threading import Thread
+import asyncio
+from asyncio.subprocess import PIPE
 from .protocol import Command, write_command
 
 
@@ -10,15 +10,15 @@ class Seat(Protocol):
         """Return a human-readable description of this seat’s configuration."""
         ...
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close all resources attached to this seat."""
         ...
 
-    def send(self, command: Command) -> None:
+    async def send(self, command: Command) -> None:
         """Send a command to this seat."""
         ...
 
-    def receive(self) -> str:
+    async def receive(self) -> str:
         """Wait for the next message from this seat."""
         ...
 
@@ -26,54 +26,70 @@ class Seat(Protocol):
 class TerminalSeat:
     """Interactive seat controlled by a human through the command line."""
 
-    def __init__(self, player: int):
-        self.player = player
+    player: int
 
     def __str__(self):
         player = self.player
         return f"TerminalSeat({player=})"
 
-    def close(self) -> None:
+    @classmethod
+    async def create(cls, player: int):
+        self = cls()
+        self.player = player
+        return self
+
+    async def close(self) -> None:
         pass
 
-    def send(self, command: Command) -> None:
+    async def send(self, command: Command) -> None:
         print(f"[seat {self.player}] <- {write_command(command)}")
 
-    def receive(self) -> str:
+    async def receive(self) -> str:
         return input(f"[seat {self.player}] -> ")
 
 
 class SubprocessSeat:
     """Unattended seat controlled by a separate process."""
 
-    def __init__(self, player: int, args: Sequence[str]):
-        self.player = player
-        self.process = Popen(
-            args, stdin=PIPE, stdout=PIPE, stderr=PIPE, bufsize=1, encoding="utf8"
-        )
-        self.log_thread = Thread(target=self._log_stderr)
-        self.log_thread.start()
-
-    def _log_stderr(self) -> None:
-        assert self.process.stderr is not None
-
-        for line in self.process.stderr:
-            print(f"[seat {self.player}] {line}", end="")
+    player: int
+    args: Sequence[str]
+    process: asyncio.subprocess.Process
+    log_stderr_task: asyncio.Task
 
     def __str__(self) -> str:
         player = self.player
-        args = self.process.args
+        args = self.args
         return f"SubprocessSeat({player=}, {args=})"
 
-    def close(self) -> None:
-        self.process.kill()
-        self.log_thread.join()
+    @classmethod
+    async def create(cls, player: int, args: Sequence[str]):
+        self = cls()
+        self.player = player
+        self.args = args
+        self.process = await asyncio.create_subprocess_exec(
+            *args,
+            stdin=PIPE,
+            stdout=PIPE,
+            stderr=PIPE,
+        )
+        self.log_stderr_task = asyncio.create_task(self._log_stderr())
+        return self
 
-    def send(self, command: Command) -> None:
+    async def close(self) -> None:
+        await self.process.wait()
+        await self.log_stderr_task
+
+    async def _log_stderr(self) -> None:
+        assert self.process.stderr is not None
+
+        while line := await self.process.stderr.readline():
+            print(f"[seat {self.player}] {line.decode()}", end="")
+
+    async def send(self, command: Command) -> None:
         assert self.process.stdin is not None
-        self.process.stdin.write(write_command(command) + "\n")
-        self.process.stdin.flush()
+        self.process.stdin.write((write_command(command) + "\n").encode())
+        await self.process.stdin.drain()
 
-    def receive(self) -> str:
+    async def receive(self) -> str:
         assert self.process.stdout is not None
-        return self.process.stdout.readline().removesuffix("\n")
+        return (await self.process.stdout.readline()).decode().removesuffix("\n")

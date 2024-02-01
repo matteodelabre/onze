@@ -3,19 +3,21 @@ import argparse
 from random import Random
 from functools import partial
 import os
+import asyncio
 
 
 Table = dict[int, seats.Seat]
 
 
-def broadcast(table: Table, command: str) -> None:
-    for player in table:
-        table[player].send(command)
+async def broadcast(table: Table, command: protocol.Command) -> None:
+    await asyncio.gather(*(table[player].send(command) for player in table))
 
 
-def make_bid(table: Table, bidder: int) -> int:
-    table[bidder].send(protocol.QueryBidCommand())
-    request = table[bidder].receive()
+async def make_bid(table: Table, bidder: int) -> int:
+    _, request = await asyncio.gather(
+        table[bidder].send(protocol.QueryBidCommand()),
+        table[bidder].receive(),
+    )
 
     try:
         return int(request)
@@ -23,23 +25,26 @@ def make_bid(table: Table, bidder: int) -> int:
         return 0
 
 
-def send_bid(table: Table, bidder: int, bid: int) -> None:
-    broadcast(table, protocol.ReplyBidCommand(bidder, bid))
+async def send_bid(table: Table, bidder: int, bid: int) -> None:
+    await broadcast(table, protocol.ReplyBidCommand(bidder, bid))
     print(f"[server] player {bidder} bids {bid}")
 
 
-def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Card:
+async def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Card:
     print(f"[server] player {player} plays - playable={protocol.write_hand(playable)}")
 
-    table[player].send(protocol.QueryCardCommand())
-    request = table[player].receive()
+    _, request = await asyncio.gather(
+        table[player].send(protocol.QueryCardCommand()),
+        table[player].receive(),
+    )
+
     card = protocol.read_card(request)
 
     if card not in playable:
         print(f"[server] invalid card '{request}'")
         card = sorted(playable, key=cards.make_card_key())[0]
 
-    broadcast(table, protocol.ReplyCardCommand(player, card))
+    await broadcast(table, protocol.ReplyCardCommand(player, card))
     print(f"[server] played {protocol.write_card(card)}")
 
     return card
@@ -62,26 +67,26 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def setup_table(programs: list[list[str]]) -> Table:
+async def setup_table(programs: list[list[str]]) -> Table:
     table: Table = {}
 
     for player in range(4):
         program = programs[player % len(programs)]
 
         if program == ["terminal"]:
-            table[player] = seats.TerminalSeat(player)
+            table[player] = await seats.TerminalSeat.create(player)
         else:
-            table[player] = seats.SubprocessSeat(player, program)
+            table[player] = await seats.SubprocessSeat.create(player, program)
 
         print(f"[server] seat {player} is {table[player]}")
-        table[player].send(protocol.PlayerCommand(player))
+        await table[player].send(protocol.PlayerCommand(player))
 
     return table
 
 
-def run() -> None:
+async def play() -> None:
     args = parse_args()
-    table = setup_table(args.program)
+    table = await setup_table(args.program)
     print(f"[server] seed={args.seed}")
 
     random = Random(args.seed)
@@ -92,16 +97,16 @@ def run() -> None:
         hands = cards.deal_hands(random)
 
         for player, hand in enumerate(hands):
-            table[player].send(protocol.HandCommand(hand))
+            await table[player].send(protocol.HandCommand(hand))
             print(f"[server] player {player} - hand={protocol.write_hand(hand)}")
 
-        winner, bid = game.bid(
+        winner, bid = await game.bid(
             starter=starter,
             make_bid=partial(make_bid, table),
             send_bid=partial(send_bid, table),
         )
 
-        scores = game.play(
+        scores = await game.play(
             starter=winner,
             hands=hands,
             play_card=partial(play_card, table),
@@ -128,7 +133,9 @@ def run() -> None:
         print(f"[server] {total_scores=}")
         starter = (starter + 1) % 4
 
-    broadcast(table, protocol.EndCommand())
+    await broadcast(table, protocol.EndCommand())
+    await asyncio.gather(*(table[player].close() for player in table))
 
-    for player in range(4):
-        table[player].close()
+
+def run():
+    asyncio.run(play())
