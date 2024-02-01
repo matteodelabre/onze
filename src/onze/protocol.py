@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from .cards import Card, Hand, Trick, make_card_key
+from .cards import Card, Hand, Trick, make_card_key, suits, ranks
 
 
 def write_card(card: Card) -> str:
@@ -9,10 +9,16 @@ def write_card(card: Card) -> str:
 
 def read_card(data: str) -> Card | None:
     """Read back a card from its serialized form."""
-    if data:
-        return Card(suit=data[0], rank=data[1:])
-    else:
+    if len(data) != 2:
         return None
+
+    suit = data[0]
+    rank = data[1]
+
+    if suit not in suits or rank not in ranks:
+        return None
+
+    return Card(suit=data[0], rank=data[1:])
 
 
 def write_trick(trick: Trick) -> str:
@@ -123,8 +129,13 @@ def read_command(data: str) -> Command:
         case ["card", "?"]:
             return QueryCardCommand()
 
-        case ["card", player, card]:
-            return ReplyCardCommand(int(player), read_card(card))
+        case ["card", player, data]:
+            card = read_card(data)
+
+            if card is None:
+                raise ValueError(f"invalid card '{data}'")
+
+            return ReplyCardCommand(int(player), card)
 
         case ["end"]:
             return EndCommand()

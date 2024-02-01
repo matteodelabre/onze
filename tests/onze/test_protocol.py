@@ -31,6 +31,10 @@ def test_read_card():
     assert read_card("D5") == Card(suit="D", rank="5")
     assert read_card("HJ") == Card(suit="H", rank="J")
     assert read_card("SA") == Card(suit="S", rank="A")
+    assert read_card("C") is None
+    assert read_card("CTT") is None
+    assert read_card("CX") is None
+    assert read_card("X9") is None
 
 
 def test_write_trick():
@@ -54,6 +58,16 @@ def test_read_trick():
         Card(suit="C", rank="5"),
         Card(suit="S", rank="A"),
     ]
+    assert read_trick("CT CT CT") == [
+        Card(suit="C", rank="T"),
+        Card(suit="C", rank="T"),
+        Card(suit="C", rank="T"),
+    ]
+    assert read_trick("CT XX X CT C C5 CTT") == [
+        Card(suit="C", rank="T"),
+        Card(suit="C", rank="T"),
+        Card(suit="C", rank="5"),
+    ]
 
 
 def test_write_hand():
@@ -76,6 +90,9 @@ def test_read_hand():
         Card(suit="C", rank="9"),
         Card(suit="C", rank="5"),
         Card(suit="S", rank="A"),
+    }
+    assert read_hand("CT CT CT") == {
+        Card(suit="C", rank="T"),
     }
 
 
@@ -125,10 +142,18 @@ def test_read_command():
     assert read_command("bid ?") == QueryBidCommand()
     assert read_command("bid 2 80") == ReplyBidCommand(player=2, bid=80)
 
+    with pytest.raises(
+        ValueError, match=r"invalid literal for int\(\) with base 10: '8A'"
+    ):
+        read_command("bid 3 8A")
+
     assert read_command("card ?") == QueryCardCommand()
     assert read_command("card 3 HQ") == ReplyCardCommand(
         player=3, card=Card(suit="H", rank="Q")
     )
+
+    with pytest.raises(ValueError, match="invalid card 'XX'"):
+        read_command("card 2 XX")
 
     assert read_command("end") == EndCommand()
 
