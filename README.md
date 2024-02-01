@@ -106,3 +106,4 @@ This is the textual protocol used for communicating between the server and the b
 ### Existing bots
 
 * [Dix-oxyde](https://github.com/Ecoral360/Dix-oxyde)
+* [Dix-cotheque](https://github.com/Ecoral360/Dix-cotheque)
