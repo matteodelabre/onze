@@ -52,31 +52,31 @@ async def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Ca
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="judge")
-    parser.add_argument("-s", "--seed", type=int, default=-1)
+    parser.add_argument("-g", "--seed", type=int, default=-1)
     parser.add_argument("-r", "--rounds", type=int, default=10)
-    parser.add_argument("--program", nargs="+", action="append")
+    parser.add_argument("-s", "--seat", nargs="+", action="append")
 
     args = parser.parse_args()
 
     if args.seed == -1:
         args.seed = int.from_bytes(os.urandom(8), byteorder="big")
 
-    if args.program is None:
-        args.program = [["terminal"]]
+    if args.seat is None:
+        args.seat = [["terminal"]]
 
     return args
 
 
-async def setup_table(programs: list[list[str]]) -> Table:
+async def setup_table(seats_args: list[list[str]]) -> Table:
     table: Table = {}
 
     for player in range(4):
-        program = programs[player % len(programs)]
+        seat_args = seats_args[player % len(seats_args)]
 
-        if program == ["terminal"]:
+        if seat_args == ["terminal"]:
             table[player] = await seats.TerminalSeat.create(player)
         else:
-            table[player] = await seats.SubprocessSeat.create(player, program)
+            table[player] = await seats.SubprocessSeat.create(player, seat_args)
 
         print(f"[server] seat {player} is {table[player]}")
         await table[player].send(protocol.PlayerCommand(player))
@@ -86,7 +86,7 @@ async def setup_table(programs: list[list[str]]) -> Table:
 
 async def play() -> None:
     args = parse_args()
-    table = await setup_table(args.program)
+    table = await setup_table(args.seat)
     print(f"[server] seed={args.seed}")
 
     random = Random(args.seed)
