@@ -51,10 +51,39 @@ async def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Ca
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="judge")
-    parser.add_argument("-g", "--seed", type=int, default=-1)
-    parser.add_argument("-r", "--rounds", type=int, default=10)
-    parser.add_argument("-s", "--seat", nargs="+", action="append")
+    parser = argparse.ArgumentParser(
+        prog="onze",
+        description="Run games of Dix opposing computer programs and/or humans.",
+    )
+    parser.add_argument(
+        "-g",
+        "--seed",
+        type=int,
+        default=-1,
+        help=(
+            "fix the seed of the pseudo-random number generator "
+            "used for dealing cards (default: use a random seed from the system)"
+        ),
+    )
+    parser.add_argument(
+        "-r",
+        "--rounds",
+        type=int,
+        default=10,
+        help="number of rounds to play (default: %(default)s)",
+    )
+    parser.add_argument(
+        "-s",
+        "--seat",
+        nargs="+",
+        action="append",
+        help=(
+            "configure a player seat: specify either a command used to run a "
+            "“bot” that plays automatically, or the keyword “terminal” to "
+            "play interactively with a human on the terminal (default: all "
+            "terminal players)"
+        ),
+    )
 
     args = parser.parse_args()
 
