@@ -82,6 +82,8 @@ Any programming language can be used, as long as it permits access to those stre
 It is the responsibility of each program to keep track of the game state in order to compute its next move.
 Any invalid move will be silently ignored and replaced with a valid move.
 
+See [bots/example.py](bots/example.py) for a minimal starting example.
+
 ### Game protocol
 
 This is the textual protocol used for communicating between the server and the bots.
