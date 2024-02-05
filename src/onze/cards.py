@@ -40,7 +40,7 @@ def make_card_key(
     return card_key
 
 
-def deal_hands(random: Random, other_hands: Hands = ()) -> Hands:
+def deal_random_hands(random: Random, other_hands: Hands = ()) -> Hands:
     """
     Randomly deal cards into four hands.
 

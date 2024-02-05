@@ -1,4 +1,10 @@
-from onze.cards import Card, make_card_key, deal_hands, score_trick, playable_cards
+from onze.cards import (
+    Card,
+    make_card_key,
+    deal_random_hands,
+    score_trick,
+    playable_cards,
+)
 from collections import Counter
 from random import Random
 import pytest
@@ -63,11 +69,11 @@ def test_make_card_key():
     ]
 
 
-def test_deal_hands():
+def test_deal_random_hands():
     random = NotRandom()
     all_ranks = ("5", "6", "7", "8", "9", "T", "J", "Q", "K", "A")
 
-    assert deal_hands(random) == (
+    assert deal_random_hands(random) == (
         set(Card("C", rank) for rank in all_ranks),
         set(Card("D", rank) for rank in all_ranks),
         set(Card("H", rank) for rank in all_ranks),
@@ -86,7 +92,7 @@ def test_deal_hands():
         Card("D", "T"),
         Card("C", "7"),
     }
-    assert deal_hands(random, (hand,)) == (
+    assert deal_random_hands(random, (hand,)) == (
         hand,
         {
             Card("C", "6"),
@@ -127,13 +133,13 @@ def test_deal_hands():
     )
 
 
-def test_deal_hands_fair():
+def test_deal_random_hands_fair():
     repeats = 100_000
     counts = Counter()
     random = Random(42)
 
     for _ in range(repeats):
-        hands = deal_hands(random)
+        hands = deal_random_hands(random)
 
         for hand in hands:
             hand_counts = Counter(card.suit for card in hand)
