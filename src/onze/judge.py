@@ -1,53 +1,22 @@
-from . import game, cards, seats, protocol
 import argparse
 from random import Random
-from functools import partial
 import os
 import asyncio
-
-
-Table = dict[int, seats.Seat]
-
-
-async def broadcast(table: Table, command: protocol.Command) -> None:
-    await asyncio.gather(*(table[player].send(command) for player in table))
-
-
-async def make_bid(table: Table, bidder: int) -> int:
-    _, request = await asyncio.gather(
-        table[bidder].send(protocol.QueryBidCommand()),
-        table[bidder].receive(),
-    )
-
-    try:
-        return int(request)
-    except ValueError:
-        return 0
-
-
-async def send_bid(table: Table, bidder: int, bid: int) -> None:
-    await broadcast(table, protocol.ReplyBidCommand(bidder, bid))
-    print(f"[server] player {bidder} bids {bid}")
-
-
-async def play_card(table: Table, player: int, playable: cards.Hand) -> cards.Card:
-    print(f"[server] player {player} plays - playable={protocol.write_hand(playable)}")
-
-    _, request = await asyncio.gather(
-        table[player].send(protocol.QueryCardCommand()),
-        table[player].receive(),
-    )
-
-    card = protocol.read_card(request)
-
-    if card not in playable:
-        print(f"[server] invalid card '{request}'")
-        card = sorted(playable, key=cards.make_card_key())[0]
-
-    await broadcast(table, protocol.ReplyCardCommand(player, card))
-    print(f"[server] played {protocol.write_card(card)}")
-
-    return card
+from . import game
+from .cards import Card, deal_hands
+from .protocol import (
+    PlayerCommand,
+    HandCommand,
+    QueryBidCommand,
+    ReplyBidCommand,
+    QueryCardCommand,
+    ReplyCardCommand,
+    EndCommand,
+    read_card,
+    write_card,
+    write_hand,
+)
+from .seats import Seat, TerminalSeat, SubprocessSeat, Table
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,20 +66,20 @@ def parse_args() -> argparse.Namespace:
 
 
 async def setup_table(seats_args: list[list[str]]) -> Table:
-    table: Table = {}
+    seats: dict[int, Seat] = {}
 
     for player in range(4):
         seat_args = seats_args[player % len(seats_args)]
 
         if seat_args == ["terminal"]:
-            table[player] = await seats.TerminalSeat.create(player)
+            seats[player] = await TerminalSeat.create(player)
         else:
-            table[player] = await seats.SubprocessSeat.create(player, seat_args)
+            seats[player] = await SubprocessSeat.create(player, seat_args)
 
-        print(f"[server] seat {player} is {table[player]}")
-        await table[player].send(protocol.PlayerCommand(player))
+        print(f"[server] seat {player} is {seats[player]}")
+        await seats[player].send(PlayerCommand(player))
 
-    return table
+    return Table(seats)
 
 
 async def play() -> None:
@@ -118,28 +87,36 @@ async def play() -> None:
     table = await setup_table(args.seat)
     print(f"[server] seed={args.seed}")
 
+    async def query_bid(bidder: int) -> int:
+        try:
+            return int(await table.communicate(bidder, QueryBidCommand()))
+        except ValueError:
+            return 0
+
+    async def reply_bid(bidder: int, bid: int) -> None:
+        await table.broadcast(ReplyBidCommand(bidder, bid))
+        print(f"[server] player {bidder} bids {bid}")
+
+    async def query_card(player: int) -> Card | None:
+        return read_card(await table.communicate(player, QueryCardCommand()))
+
+    async def reply_card(player: int, card: Card) -> None:
+        await table.broadcast(ReplyCardCommand(player, card))
+        print(f"[server] player {player} plays {write_card(card)}")
+
     random = Random(args.seed)
     total_scores = {0: 0, 1: 0}
     starter = 0
 
     for _ in range(args.rounds):
-        hands = cards.deal_hands(random)
+        hands = deal_hands(random)
 
         for player, hand in enumerate(hands):
-            await table[player].send(protocol.HandCommand(hand))
-            print(f"[server] player {player} - hand={protocol.write_hand(hand)}")
+            await table.send(player, HandCommand(hand))
+            print(f"[server] player {player} - hand={write_hand(hand)}")
 
-        winner, bid = await game.bid(
-            starter=starter,
-            make_bid=partial(make_bid, table),
-            send_bid=partial(send_bid, table),
-        )
-
-        scores = await game.play(
-            starter=winner,
-            hands=hands,
-            play_card=partial(play_card, table),
-        )
+        winner, bid = await game.bid(starter, query_bid, reply_bid)
+        scores = await game.round(winner, hands, query_card, reply_card)
 
         print(f"[server] {scores=}")
 
@@ -162,8 +139,8 @@ async def play() -> None:
         print(f"[server] {total_scores=}")
         starter = (starter + 1) % 4
 
-    await broadcast(table, protocol.EndCommand())
-    await asyncio.gather(*(table[player].close() for player in table))
+    await table.broadcast(EndCommand())
+    await table.close()
 
 
 def run():

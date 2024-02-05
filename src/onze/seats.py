@@ -22,8 +22,13 @@ class Seat(Protocol):
         """Wait for the next message from this seat."""
         ...
 
+    async def communicate(self, command: Command) -> str:
+        """Send a command to this seat and wait for a response."""
+        _, response = await asyncio.gather(self.send(command), self.receive())
+        return response
 
-class TerminalSeat:
+
+class TerminalSeat(Seat):
     """Interactive seat controlled by a human through the command line."""
 
     player: int
@@ -48,7 +53,7 @@ class TerminalSeat:
         return input(f"[seat {self.player}] -> ")
 
 
-class SubprocessSeat:
+class SubprocessSeat(Seat):
     """Unattended seat controlled by a separate process."""
 
     player: int
@@ -93,3 +98,23 @@ class SubprocessSeat:
     async def receive(self) -> str:
         assert self.process.stdout is not None
         return (await self.process.stdout.readline()).decode().removesuffix("\n")
+
+
+class Table:
+    def __init__(self, seats: dict[int, Seat]):
+        self.seats = seats
+
+    async def broadcast(self, command: Command) -> None:
+        await asyncio.gather(*(seat.send(command) for seat in self.seats.values()))
+
+    async def close(self) -> None:
+        await asyncio.gather(*(seat.close() for seat in self.seats.values()))
+
+    async def send(self, player: int, command: Command) -> None:
+        await self.seats[player].send(command)
+
+    async def receive(self, player: int) -> str:
+        return await self.seats[player].receive()
+
+    async def communicate(self, player: int, command: Command) -> str:
+        return await self.seats[player].communicate(command)
