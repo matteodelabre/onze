@@ -36,10 +36,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-r",
-        "--rounds",
-        type=int,
-        default=10,
-        help="number of rounds to play (default: %(default)s)",
+        "--max-rounds",
+        default="inf",
+        help=(
+            "maximum number of rounds to play, or inf to play an unlimited "
+            "number of rounds (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "-w",
+        "--winning-score",
+        default="500",
+        help=(
+            "stop the game when any team reaches this score, or inf to play "
+            "until the maximum number of rounds is reached (default: %(default)s)"
+        ),
     )
     parser.add_argument(
         "-s",
@@ -115,16 +126,17 @@ async def play() -> None:
         await table.broadcast(ReplyCardCommand(player, card))
         print(f"[server] player {player} plays {write_card(card)}")
 
-    starter = 0
     results = await game.play(
-        starter,
-        deal_hands,
-        query_bid,
-        reply_bid,
-        query_card,
-        reply_card,
-        max_rounds=args.rounds,
+        starter=0,
+        deal_hands=deal_hands,
+        query_bid=query_bid,
+        reply_bid=reply_bid,
+        query_card=query_card,
+        reply_card=reply_card,
+        max_rounds=int(args.max_rounds) if args.max_rounds != "inf" else None,
+        winning_score=int(args.winning_score) if args.winning_score != "inf" else None,
     )
+
     print(f"[server] results={results}")
 
     await table.broadcast(EndCommand())

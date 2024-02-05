@@ -62,12 +62,11 @@ $ onze --seat terminal --seat python bots/example.py
 $ onze --seat python bots/example.py --seat julia bots/jean.jl
 ```
 
-### Choosing rounds
+### Choosing the number of rounds
 
-By default, ten rounds of the game is played.
+By default, rounds are played until at least one of the two teams reaches a total of 500 points.
 The starting bid position rotates with each round.
-Scores are accumulated into a total score after each round.
-Use the `-r / --rounds` flag to change the number of rounds.
+Use the `-r / --max-rounds` flag to limit the number of rounds, or the `-w / --winning-score` flag to change the minimum total of points needed to win the game.
 
 ### Setting the seed
 
