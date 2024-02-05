@@ -1,8 +1,144 @@
-from onze.cards import Card, Hand
+from onze.cards import Card
 from onze import game
 from onze.protocol import read_hand, read_card
 import asyncio
 from dataclasses import dataclass
+from typing import Sequence
+
+
+@dataclass
+class Bid:
+    player: int
+    query: int
+    reply: int
+
+
+def check_bid_sequence(
+    starter: int,
+    bids: Sequence[Bid],
+    winner: tuple[int, int],
+) -> None:
+    next_bid = 0
+
+    async def query_bid(player: int) -> Card:
+        assert player == bids[next_bid].player
+        return bids[next_bid].query
+
+    async def reply_bid(player: int, bid: int) -> None:
+        nonlocal next_bid
+        assert player == bids[next_bid].player
+        assert bid == bids[next_bid].reply
+        next_bid += 1
+
+    assert asyncio.run(game.bid(starter, query_bid, reply_bid)) == winner
+
+
+def test_bid():
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=50, reply=50),
+            Bid(player=1, query=55, reply=55),
+            Bid(player=2, query=60, reply=60),
+            Bid(player=3, query=65, reply=65),
+            Bid(player=0, query=70, reply=70),
+            Bid(player=1, query=75, reply=75),
+            Bid(player=2, query=80, reply=80),
+            Bid(player=3, query=85, reply=85),
+            Bid(player=0, query=90, reply=90),
+            Bid(player=1, query=95, reply=95),
+            Bid(player=2, query=100, reply=100),
+            Bid(player=3, query=105, reply=105),
+            Bid(player=0, query=0, reply=0),
+            Bid(player=1, query=0, reply=0),
+            Bid(player=2, query=0, reply=0),
+        ),
+        winner=(3, 105),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=0, reply=0),
+            Bid(player=1, query=55, reply=55),
+            Bid(player=2, query=0, reply=0),
+            Bid(player=3, query=60, reply=60),
+            Bid(player=1, query=65, reply=65),
+            Bid(player=3, query=0, reply=0),
+        ),
+        winner=(1, 65),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=0, reply=0),
+            Bid(player=1, query=55, reply=55),
+            Bid(player=2, query=0, reply=0),
+            Bid(player=3, query=60, reply=60),
+            Bid(player=1, query=0, reply=0),
+        ),
+        winner=(3, 60),
+    )
+    check_bid_sequence(
+        starter=1,
+        bids=(
+            Bid(player=1, query=0, reply=0),
+            Bid(player=2, query=55, reply=55),
+            Bid(player=3, query=0, reply=0),
+            Bid(player=0, query=60, reply=60),
+            Bid(player=2, query=0, reply=0),
+        ),
+        winner=(0, 60),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=0, reply=0),
+            Bid(player=1, query=0, reply=0),
+            Bid(player=2, query=0, reply=0),
+            Bid(player=3, query=0, reply=50),
+        ),
+        winner=(3, 50),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=0, reply=0),
+            Bid(player=1, query=50, reply=50),
+            Bid(player=2, query=0, reply=0),
+            Bid(player=3, query=0, reply=0),
+        ),
+        winner=(1, 50),
+    )
+    check_bid_sequence(
+        starter=3,
+        bids=(
+            Bid(player=3, query=0, reply=0),
+            Bid(player=0, query=50, reply=50),
+            Bid(player=1, query=0, reply=0),
+            Bid(player=2, query=0, reply=0),
+        ),
+        winner=(0, 50),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=105, reply=105),
+            Bid(player=1, query=105, reply=0),
+            Bid(player=2, query=110, reply=0),
+            Bid(player=3, query=0, reply=0),
+        ),
+        winner=(0, 105),
+    )
+    check_bid_sequence(
+        starter=0,
+        bids=(
+            Bid(player=0, query=40, reply=0),
+            Bid(player=1, query=50, reply=50),
+            Bid(player=2, query=50, reply=0),
+            Bid(player=3, query=53, reply=0),
+        ),
+        winner=(1, 50),
+    )
 
 
 @dataclass
