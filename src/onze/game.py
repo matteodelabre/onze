@@ -2,6 +2,9 @@ from .cards import Hands, Card, score_trick, playable_cards, make_card_key
 from collections.abc import Callable, Awaitable
 
 
+Scores = dict[int, int]
+
+
 async def bid(
     starter: int,
     query_bid: Callable[[int], Awaitable[int]],
@@ -28,29 +31,29 @@ async def bid(
     maximum_bid = 105
 
     while len(pending_bids) > 1:
-        bid = await query_bid(bidder)
+        bid_value = await query_bid(bidder)
 
-        if bid % 5 == 0 and minimum_bid <= bid <= maximum_bid:
-            pending_bids[bidder] = bid
-            minimum_bid = bid + 5
+        if bid_value % 5 == 0 and minimum_bid <= bid_value <= maximum_bid:
+            pending_bids[bidder] = bid_value
+            minimum_bid = bid_value + 5
         else:
-            bid = 0
+            bid_value = 0
             del pending_bids[bidder]
 
-        await reply_bid(bidder, bid)
+        await reply_bid(bidder, bid_value)
         bidder = (bidder + 1) % 4
 
         while bidder not in pending_bids:
             bidder = (bidder + 1) % 4
 
-    winner, bid = next(iter(pending_bids.items()))
+    winner, bid_value = next(iter(pending_bids.items()))
 
-    if bid == 0:
+    if bid_value == 0:
         # Default bid if everyone else passes
-        bid = default_bid
-        await reply_bid(winner, bid)
+        bid_value = default_bid
+        await reply_bid(winner, bid_value)
 
-    return winner, bid
+    return winner, bid_value
 
 
 async def round(
@@ -58,7 +61,7 @@ async def round(
     hands: Hands,
     query_card: Callable[[int], Awaitable[Card | None]],
     reply_card: Callable[[int, Card], Awaitable[None]],
-) -> dict[int, int]:
+) -> Scores:
     """
     Run a game round and return scores.
 
@@ -67,7 +70,7 @@ async def round(
     :param query_card: called when a player needs to play a card
         (an invalid card is silently replaced with any valid one)
     :param reply_card: called to confirm a card played by a player
-    :returns: final scores of the two teams
+    :returns: scores of the two teams
     """
     player = starter
     trick: tuple[Card, ...] = ()
@@ -100,3 +103,63 @@ async def round(
             trick = ()
 
     return scores
+
+
+async def play(
+    starter: int,
+    deal_hands: Callable[[], Awaitable[Hands]],
+    query_bid: Callable[[int], Awaitable[int]],
+    reply_bid: Callable[[int, int], Awaitable[None]],
+    query_card: Callable[[int], Awaitable[Card | None]],
+    reply_card: Callable[[int, Card], Awaitable[None]],
+    max_rounds: int | None = None,
+    winning_score: int | None = None,
+) -> Scores:
+    """
+    Run a complete game and return total scores.
+
+    :param starter: initial player (rotates at each round)
+    :param deal_hands: called to deal a hand to each player
+    :param query_bid: (see :func:`game.bid()`)
+    :param reply_bid: (see :func:`game.bid()`)
+    :param query_card: (see :func:`game.round()`)
+    :param reply_card: (see :func:`game.round()`)
+    :param max_rounds: maximum number of rounds to play before ending the game,
+        or None to play an unlimited number of rounds
+    :param winning_score: stop the game when any team reaches this score,
+        or None to play until the maximum number of rounds is reached
+    :returns: final scores of the two teams
+    """
+    total_scores = {0: 0, 1: 0}
+    starter = 0
+    round_index = 0
+
+    while (max_rounds is None or round_index <= max_rounds) and (
+        winning_score is None
+        or not any(score >= winning_score for score in total_scores.values())
+    ):
+        hands = await deal_hands()
+        winner, bid_value = await bid(starter, query_bid, reply_bid)
+        scores = await round(winner, hands, query_card, reply_card)
+
+        bidding_team = winner % 2
+        other_team = (winner + 1) % 2
+
+        if bid_value == 105:
+            if scores[bidding_team] < 100:
+                total_scores[other_team] += 500
+            else:
+                total_scores[bidding_team] += 500
+        else:
+            if scores[bidding_team] < bid_value:
+                total_scores[bidding_team] -= bid_value
+            else:
+                total_scores[bidding_team] += scores[bidding_team]
+
+            if total_scores[other_team] < 400:
+                total_scores[other_team] += scores[other_team]
+
+        starter = (starter + 1) % 4
+        round_index += 1
+
+    return total_scores

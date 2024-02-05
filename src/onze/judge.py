@@ -3,7 +3,7 @@ from random import Random
 import os
 import asyncio
 from . import game
-from .cards import Card, deal_hands
+from .cards import Hands, Card, deal_random_hands
 from .protocol import (
     PlayerCommand,
     HandCommand,
@@ -85,7 +85,18 @@ async def setup_table(seats_args: list[list[str]]) -> Table:
 async def play() -> None:
     args = parse_args()
     table = await setup_table(args.seat)
+    random = Random(args.seed)
+
     print(f"[server] seed={args.seed}")
+
+    async def deal_hands() -> Hands:
+        hands = deal_random_hands(random)
+
+        for player, hand in enumerate(hands):
+            await table.send(player, HandCommand(hand))
+            print(f"[server] player {player} - hand={write_hand(hand)}")
+
+        return hands
 
     async def query_bid(bidder: int) -> int:
         try:
@@ -104,40 +115,17 @@ async def play() -> None:
         await table.broadcast(ReplyCardCommand(player, card))
         print(f"[server] player {player} plays {write_card(card)}")
 
-    random = Random(args.seed)
-    total_scores = {0: 0, 1: 0}
     starter = 0
-
-    for _ in range(args.rounds):
-        hands = deal_hands(random)
-
-        for player, hand in enumerate(hands):
-            await table.send(player, HandCommand(hand))
-            print(f"[server] player {player} - hand={write_hand(hand)}")
-
-        winner, bid = await game.bid(starter, query_bid, reply_bid)
-        scores = await game.round(winner, hands, query_card, reply_card)
-
-        print(f"[server] {scores=}")
-
-        bidding_team = winner % 2
-        other_team = (winner + 1) % 2
-
-        if bid == 105:
-            if scores[bidding_team] < 100:
-                total_scores[other_team] += 500
-            else:
-                total_scores[bidding_team] += 500
-        else:
-            if scores[bidding_team] < bid:
-                total_scores[bidding_team] -= bid
-            else:
-                total_scores[bidding_team] += scores[bidding_team]
-
-            total_scores[other_team] += scores[other_team]
-
-        print(f"[server] {total_scores=}")
-        starter = (starter + 1) % 4
+    results = await game.play(
+        starter,
+        deal_hands,
+        query_bid,
+        reply_bid,
+        query_card,
+        reply_card,
+        max_rounds=args.rounds,
+    )
+    print(f"[server] results={results}")
 
     await table.broadcast(EndCommand())
     await table.close()
