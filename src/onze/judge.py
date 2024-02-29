@@ -1,7 +1,9 @@
 import argparse
 from random import Random
+import sys
 import os
 import asyncio
+from pathlib import Path
 from . import game
 from .cards import Hands, Card, deal_random_hands
 from .protocol import (
@@ -17,6 +19,7 @@ from .protocol import (
     write_hand,
 )
 from .seats import Seat, TerminalSeat, SubprocessSeat, Table
+from .box import Box, Mount
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,13 +58,48 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-s",
         "--seat",
-        nargs="+",
         action="append",
+        default=[],
         help=(
-            "configure a player seat: specify either a command used to run a "
-            "“bot” that plays automatically, or the keyword “terminal” to "
-            "play interactively with a human on the terminal (default: all "
-            "terminal players)"
+            "configure a player seat: specify either “terminal” to play interactively "
+            "with a human on the terminal, or a path to a bot folder containing a 'run' "
+            "script (default: all terminal players)"
+        ),
+    )
+    parser.add_argument(
+        "-b",
+        "--box",
+        type=str,
+        help=(
+            "path to a folder containing an environment into which each non-terminal "
+            "seat will be isolated (default: no isolation)"
+        ),
+    )
+    parser.add_argument(
+        "--box-tasks-limit",
+        type=int,
+        default=-1,
+        help=(
+            "specify the maximum number of processes for each seat "
+            "(default: no limit)"
+        ),
+    )
+    parser.add_argument(
+        "--box-ram-limit",
+        type=int,
+        default=-1,
+        help=(
+            "specify the maximum RAM usage for each seat in bytes "
+            "(default: no limit)"
+        ),
+    )
+    parser.add_argument(
+        "--box-swap-limit",
+        type=int,
+        default=-1,
+        help=(
+            "specify the maximum swap usage for each seat in bytes "
+            "(default: no limit)"
         ),
     )
 
@@ -70,22 +108,56 @@ def parse_args() -> argparse.Namespace:
     if args.seed == -1:
         args.seed = int.from_bytes(os.urandom(8), byteorder="big")
 
-    if args.seat is None:
-        args.seat = [["terminal"]]
+    if not args.seat:
+        args.seat = ["terminal"]
+
+    if args.box is None and (
+        args.box_tasks_limit != -1
+        or args.box_ram_limit != -1
+        or args.box_swap_limit != -1
+    ):
+        parser.print_usage()
+        print(
+            f"{parser.prog}: error: cannot specify --box-* flags "
+            "without specifying --box",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     return args
 
 
-async def setup_table(seats_args: list[list[str]]) -> Table:
+async def setup_table(args) -> Table:
     seats: dict[int, Seat] = {}
 
     for player in range(4):
-        seat_args = seats_args[player % len(seats_args)]
+        path = args.seat[player % len(args.seat)]
 
-        if seat_args == ["terminal"]:
+        if path == "terminal":
             seats[player] = await TerminalSeat.create(player)
         else:
-            seats[player] = await SubprocessSeat.create(player, seat_args)
+            if args.box:
+                box = Box(
+                    root=Path(args.box),
+                    mounts=[
+                        Mount(
+                            destination=Path("/bot"),
+                            source=Path(path),
+                            options=["rbind", "ro"],
+                        ),
+                    ],
+                    tasks_limit=args.box_tasks_limit,
+                    ram_limit=args.box_ram_limit,
+                    swap_limit=args.box_swap_limit,
+                )
+                cwd = "/bot"
+            else:
+                box = None
+                cwd = path
+
+            seats[player] = await SubprocessSeat.create(
+                player, "./run", cwd=cwd, box=box
+            )
 
         print(f"[server] seat {player} is {seats[player]}")
         await seats[player].send(PlayerCommand(player))
@@ -95,7 +167,7 @@ async def setup_table(seats_args: list[list[str]]) -> Table:
 
 async def play() -> None:
     args = parse_args()
-    table = await setup_table(args.seat)
+    table = await setup_table(args)
     random = Random(args.seed)
 
     print(f"[server] seed={args.seed}")

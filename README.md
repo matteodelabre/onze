@@ -47,19 +47,25 @@ $ onze
 * To run a game opposing four instances of the same program:
 
 ```console
-$ onze --seat python bots/example.py
+$ onze --seat bots/example
 ```
 
 * To run a game opposing a team of two humans with a team of the same program:
 
 ```console
-$ onze --seat terminal --seat python bots/example.py
+$ onze --seat terminal --seat bots/example
 ```
 
 * To run a game with two teams of two different programs:
 
 ```console
-$ onze --seat python bots/example.py --seat julia bots/jean.jl
+$ onze --seat bots/example --seat bots/jean
+```
+
+* To run a game with programs running in isolated enviroments (see [below](#isolation) for more details):
+
+```console
+$ onze --seat bots/example --box rootfs
 ```
 
 ### Choosing the number of rounds
@@ -76,13 +82,18 @@ If unset, a random seed is chosen using random information from the operating sy
 ## Developing a bot
 
 “Bots” (computer programs implementing a strategy) communicate with the server on **standard input** (for receiving commands from the server) and **output** (for sending responses to the server).
-The programs can use the **standard error** stream to log information to the game log.
+The programs can use the **standard error** stream to send information to the game log.
 
 Any programming language can be used, as long as it permits access to those streams.
 It is the responsibility of each program to keep track of the game state in order to compute its next move.
 Any invalid move will be silently ignored and replaced with a valid move.
 
-See [bots/example.py](bots/example.py) for a minimal starting example.
+See [bots/example](bots/example) for a minimal starting example.
+
+### Bot structure
+
+A bot must be a **directory** containing an executable file called `run` (i.e., with the `x` flag set, and starting with a [hashbang](https://en.wikipedia.org/wiki/Shebang_(Unix)) line or in an executable binary format).
+When the bot is started, this file will be executed without any options and with the standard streams properly setup.
 
 ### Game protocol
 
@@ -109,3 +120,42 @@ This is the textual protocol used for communicating between the server and the b
 * [Dix-oxyde](https://github.com/Ecoral360/Dix-oxyde)
 * [Dix-cotheque](https://github.com/Ecoral360/Dix-cotheque)
 * [A10tion](https://github.com/MedButch/A10tion)
+
+## Isolation
+
+To prevent cheating by inter-process communication, and to provide a repeatable environment for evaluation, bots can be **executed in isolated container-like environments.**
+
+### Required setup
+
+* Linux ⩾5.3
+* [systemd with cgroups v2](https://wiki.archlinux.org/title/Cgroups)
+* [Enabled user namespaces](https://wiki.archlinux.org/title/Linux_Containers#Unprivileged_containers_on_linux-hardened_and_custom_kernels)
+
+### Creating an environment
+
+You need a working root filesystem to use as an environment.
+This environment will be mounted read-only as the root filesystem for the bots to use.
+It should contain all the usual required binaries for Linux programs.
+
+For example, to create an Arch Linux environment under the `rootfs/` subdirectory (uses approximately 1.4 GiB):
+
+```
+$ pacstrap -N -M -K rootfs base base-devel
+```
+
+If needed, you can run the following command to enter a shell in the newly-created environment:
+
+```
+$ arch-chroot -N rootfs
+```
+
+The environment must contain an empty `/bot` folder under which the bot folder will be mounted during execution.
+
+### Running in isolation
+
+The following flags are used to control the isolation:
+
+* `--box`: Specify the path to the root filesystem (required for isolation).
+* `--box-tasks-limit`: Maximum number of threads/processes that can be spawned by the bot.
+* `--box-ram-limit`: Maximum memory usage for the bot in bytes.
+* `--box-swap-limit`: Maximum swap usage for the bot in bytes.

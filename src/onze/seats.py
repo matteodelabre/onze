@@ -1,7 +1,9 @@
 from collections.abc import Sequence
 from typing import Protocol
-import asyncio
-from asyncio.subprocess import PIPE
+from asyncio import gather, create_task, create_subprocess_exec, Task
+from asyncio.subprocess import Process, PIPE
+from pathlib import Path
+from .box import create_boxed_subprocess_exec, Box
 from .protocol import Command, write_command
 
 
@@ -24,7 +26,7 @@ class Seat(Protocol):
 
     async def communicate(self, command: Command) -> str:
         """Send a command to this seat and wait for a response."""
-        _, response = await asyncio.gather(self.send(command), self.receive())
+        _, response = await gather(self.send(command), self.receive())
         return response
 
 
@@ -58,26 +60,48 @@ class SubprocessSeat(Seat):
 
     player: int
     args: Sequence[str]
-    process: asyncio.subprocess.Process
-    log_stderr_task: asyncio.Task
+    box: Box | None
+    process: Process
+    log_stderr_task: Task
 
     def __str__(self) -> str:
         player = self.player
         args = self.args
-        return f"SubprocessSeat({player=}, {args=})"
+        box = str(self.box.root) if self.box is not None else None
+        return f"{self.__class__.__name__}({player=}, {args=}, {box=})"
 
     @classmethod
-    async def create(cls, player: int, args: Sequence[str]):
+    async def create(
+        cls,
+        player: int,
+        *args: str,
+        cwd: Path | str | None = None,
+        box: Box | None = None,
+    ):
         self = cls()
         self.player = player
         self.args = args
-        self.process = await asyncio.create_subprocess_exec(
-            *args,
-            stdin=PIPE,
-            stdout=PIPE,
-            stderr=PIPE,
-        )
-        self.log_stderr_task = asyncio.create_task(self._log_stderr())
+        self.box = box
+
+        if box is None:
+            self.process = await create_subprocess_exec(
+                *args,
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE,
+                cwd=cwd,
+            )
+        else:
+            self.process = await create_boxed_subprocess_exec(
+                *args,
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE,
+                box=box,
+                cwd=cwd,
+            )
+
+        self.log_stderr_task = create_task(self._log_stderr())
         return self
 
     async def close(self) -> None:
@@ -105,10 +129,10 @@ class Table:
         self.seats = seats
 
     async def broadcast(self, command: Command) -> None:
-        await asyncio.gather(*(seat.send(command) for seat in self.seats.values()))
+        await gather(*(seat.send(command) for seat in self.seats.values()))
 
     async def close(self) -> None:
-        await asyncio.gather(*(seat.close() for seat in self.seats.values()))
+        await gather(*(seat.close() for seat in self.seats.values()))
 
     async def send(self, player: int, command: Command) -> None:
         await self.seats[player].send(command)
