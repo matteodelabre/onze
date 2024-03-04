@@ -97,7 +97,13 @@ When the bot is started, this file will be executed without any options and with
 
 ### Game protocol
 
-This is the textual protocol used for communicating between the server and the bots.
+The server and the bots communicate using a **textual, line-based protocol**.
+The server sends each command as a line to the bot process’s standard input, and expects an answer as a line on the bot process’s standard output.
+
+Bots take turns in a synchronous manner, which gives the guarantee that they will always receive the commands from the server in the same order.
+In particular, information about played cards is always received in the order in which they are played.
+
+Note that the bot processes are never paused, even when it is not their turn to play a card.
 
 * Cards are represented by two characters (e.g. HJ for the Jack of Hearts)
     - Suit: C (Clubs), D (Diamonds), H (Hearts), S (Spades)
@@ -107,13 +113,21 @@ This is the textual protocol used for communicating between the server and the b
 * `hand [CARD]...`
     - At the start of each round, gives a player the set of 10 cards from which they can draw
 * `bid ?`
-    - Asks a player to bid, must respond with a valid number, or 0 to skip (invalid numbers cause a skip)
+    - Asks a player to bid, must respond with a bid value
+    - Valid bids are in increments of 5 in the 50–105 range
+    - A bid of 0 means that the player exits the bidding process
+    - Invalid bids are silently replaced with 0
 * `bid [PLAYER] [BID]`
     - Information that a player has bid a certain amount
+    - Players also receive an acknowledgment of their own bids
 * `card ?`
-    - Asks a player to play a card from their hand, must respond with a single valid card (illegal moves cause any card from the hand to be played)
+    - Asks a player to play a card from their hand, must respond with a single valid card
+    - Illegal moves are silently replaced with an unspecified valid card
 * `card [PLAYER] [CARD]`
     - Information that a player has played a certain card
+    - Players also receive an acknowledgment of their own played cards
+* `end`
+    - The game has ended and the bot process will be terminated soon
 
 ### Existing bots
 
@@ -159,3 +173,5 @@ The following flags are used to control the isolation:
 * `--box-tasks-limit`: Maximum number of threads/processes that can be spawned by the bot.
 * `--box-ram-limit`: Maximum memory usage for the bot in bytes.
 * `--box-swap-limit`: Maximum swap usage for the bot in bytes.
+
+When isolated, the filesystems that the process has access to are always mounted read-only.
